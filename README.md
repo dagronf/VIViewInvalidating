@@ -50,8 +50,8 @@ class BadgeView: NSView {
    var color: NSColor = NSColor.blue
    
    // Set needsDisplay, needsLayout and invalidateIntrinsicContentSize() on the view when the value changes
-   	@VIViewInvalidating(.display, .layout, .intrinsicContentSize)
-	var position: NSControl.ImagePosition = .imageLeft
+   @VIViewInvalidating(.display, .layout, .intrinsicContentSize)
+   var position: NSControl.ImagePosition = .imageLeft
 }
 ```
 
