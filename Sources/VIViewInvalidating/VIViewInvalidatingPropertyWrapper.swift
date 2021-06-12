@@ -82,19 +82,30 @@ public typealias VIViewType = UIView
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
 extension VIViewType {
 	/// Built-in view invalidation types. Can be extended with new custom types if needed
-	public struct VIViewInvalidatingType: Hashable {
+	public struct VIViewInvalidatingType: Hashable, CustomDebugStringConvertible {
+
 		public let rawValue: String
+
+		/// Returns a debug description for the VIViewInvalidatingType type
+		public var debugDescription: String {
+			return "VIViewInvalidatingType('\(rawValue)')"
+		}
+
+		/// Initializer
+		public init(_ rawValue: String) {
+			self.rawValue = rawValue
+		}
 
 		// Built-in types
 
 		/// `setNeedsDisplay`
-		public static let display = VIViewInvalidatingType(rawValue: "_display")
+		public static let display = VIViewInvalidatingType("_display")
 		/// `setNeedsUpdateConstraints`
-		public static let constraints = VIViewInvalidatingType(rawValue: "_constraints")
+		public static let constraints = VIViewInvalidatingType("_constraints")
 		/// `setNeedsLayout`
-		public static let layout = VIViewInvalidatingType(rawValue: "_layout")
+		public static let layout = VIViewInvalidatingType("_layout")
 		/// `invalidateIntrinsicContentSize`
-		public static let intrinsicContentSize = VIViewInvalidatingType(rawValue: "_intrinsicContentSize")
+		public static let intrinsicContentSize = VIViewInvalidatingType("_intrinsicContentSize")
 
 		// All built-in types
 		fileprivate static let allBuiltIn: [VIViewInvalidatingType] = [.display, .constraints, .layout, .intrinsicContentSize]
@@ -176,7 +187,7 @@ extension VIViewType {
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
-protocol VIViewCustomInvalidating {
+public protocol VIViewCustomInvalidating {
 	/// Called when a ViewInvalidation specifies one or more custom invalidation types.
 	/// `customInvalidationType` contains only the custom validation types specified, and none of the built-in (if they were also specified)
 	func performViewInvalidation(_ customInvalidationTypes: VIViewType.VIViewInvalidatingTypes)

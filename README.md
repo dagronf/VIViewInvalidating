@@ -63,7 +63,7 @@ You can specify custom invalidation types by conforming your view to the `VIView
 
 ```swift
 extension VIViewType.VIViewInvalidatingType {
-   static let customInvalidation = VIViewType.VIViewInvalidatingType(rawValue: "customInvalidation")
+   static let customInvalidation = VIViewType.VIViewInvalidatingType("customInvalidation")
 }
 
 class BadgeView: NSView, VIViewCustomInvalidating  {
