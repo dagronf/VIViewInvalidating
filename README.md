@@ -93,7 +93,7 @@ You can provide custom invalidators by defining a new class of type `VIViewType.
 #### Example
 
 ```swift
-class CustomInvalidator: VIViewType.VIViewInvalidatorAction {
+class CustomInvalidator: VIViewInvalidatorAction {
    public override func invalidate(_ view: VIViewType) {
       Swift.print("Custom invalidator called")
    }
@@ -111,13 +111,17 @@ class ExcitingView: NSView {
 
 # Updates
 
-## 2.0.0
+### 2.0.1
+
+* Resolved Swift runtime crash when building in Xcode 11 and Swift 5.1. Previous version would crash the Swift runtime as it tries to resolve generic arguments for a class nested in an extension. Removing the nested extension containing the property wrapper (it wasn't required) solved the issue. This has no impact when compiling with Xcode 12 and above.
+
+### 2.0.0
 
 * [**BREAKING**] Now that Apple has made `@Invalidating` available through Xcode, I've changed custom callback to match Apple's 'Invalidating' protocol to aid adoption when upgrading the SDK to one that supports `@Invalidating`.
 * [**BREAKING**] Changed the mechanism for handling custom invalidations.
 * Added `restorableState` as an invalidation type on macOS to be compatible with `@Invalidating` on macOS 12+
 
-## 1.0.0
+### 1.0.0
 
 * Initial release
 

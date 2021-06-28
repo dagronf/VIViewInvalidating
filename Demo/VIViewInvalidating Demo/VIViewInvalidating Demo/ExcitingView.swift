@@ -9,7 +9,7 @@ import AppKit
 import VIViewInvalidating
 
 // Custom Invalidator
-class MyCustomInvalidator: VIViewType.VIViewInvalidatorAction {
+class MyCustomInvalidator: VIViewInvalidatorAction {
 	public override func invalidate(_ view: VIViewType) {
 		Swift.print("MyCustomInvalidator called...")
 	}

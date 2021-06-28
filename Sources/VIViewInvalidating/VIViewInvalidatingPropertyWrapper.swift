@@ -71,10 +71,10 @@
 ///
 /// **NOTE** that this behaviour is NOT compatible with Apple's `@Invalidating` property wrapper.  `@Invalidating` doesn't provide a similar functionality, so be aware when you move your build target up to macOS13/iOS15 there is no direct replacement so your code will break.
 ///
-/// You can provide custom invalidators by defining a new class of type `VIViewType.VIViewInvalidatorAction`.
+/// You can provide custom invalidators by defining a new class of type `VIViewInvalidatorAction`.
 ///
 /// ```swift
-/// class CustomInvalidator: VIViewType.VIViewInvalidatorAction {
+/// class CustomInvalidator: VIViewInvalidatorAction {
 ///    public override func invalidate(_ view: VIViewType) {
 ///       Swift.print("Custom invalidator called")
 ///    }
@@ -106,84 +106,82 @@ public typealias VIViewType = UIView
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
-extension VIViewType {
 
-	/// An invalidator class type
-	open class VIViewInvalidatorAction {
-		public init() { }
+/// An invalidator class type
+open class VIViewInvalidatorAction {
+	public init() { }
 
-		/// Will be called when the containing property is changed
-		open func invalidate(_ view: VIViewType) {
-			fatalError("Must override this method for custom invalidators")
-		}
-
-		// Built-in types
-
-		/// `setNeedsDisplay`
-		public static let display = VIViewInvalidatorAction.Display()
-		/// `setNeedsUpdateConstraints`
-		public static let constraints = VIViewInvalidatorAction.Constraints()
-		/// `setNeedsLayout`
-		public static let layout = VIViewInvalidatorAction.Layout()
-		/// `invalidateIntrinsicContentSize`
-		public static let intrinsicContentSize = VIViewInvalidatorAction.InstrinsicContentSize()
-
-		#if canImport(AppKit)
-		/// `invalidateRestorableState`
-		public static let restorableState = VIViewInvalidatorAction.RestorableState()
-		#endif
+	/// Will be called when the containing property is changed
+	open func invalidate(_ view: VIViewType) {
+		fatalError("Must override this method for custom invalidators")
 	}
 
-	/// A property wrapper for NSView/UIView that will automatically invalidate the containing view
-	/// as its wrapped value is changed.
-	@propertyWrapper
-	public struct VIViewInvalidating<Value: Equatable> {
-		/// Built-in invalidating types supported by the propertyWrapper
-		private let invalidators: [VIViewInvalidatorAction]
+	// Built-in types
 
-		// Stored value
-		private var valueType: Value
+	/// `setNeedsDisplay`
+	public static let display = VIViewInvalidatorAction.Display()
+	/// `setNeedsUpdateConstraints`
+	public static let constraints = VIViewInvalidatorAction.Constraints()
+	/// `setNeedsLayout`
+	public static let layout = VIViewInvalidatorAction.Layout()
+	/// `invalidateIntrinsicContentSize`
+	public static let intrinsicContentSize = VIViewInvalidatorAction.InstrinsicContentSize()
 
-		/// Wrapped value
-		public var wrappedValue: Value {
-			get {
-				return self.valueType
-			}
-			set {
-				self.valueType = newValue
-			}
+#if canImport(AppKit)
+	/// `invalidateRestorableState`
+	public static let restorableState = VIViewInvalidatorAction.RestorableState()
+#endif
+}
+
+/// A property wrapper for NSView/UIView that will automatically invalidate the containing view
+/// as its wrapped value is changed.
+@propertyWrapper
+public struct VIViewInvalidating<Value: Equatable> {
+	/// Built-in invalidating types supported by the propertyWrapper
+	private let invalidators: [VIViewInvalidatorAction]
+
+	// Stored value
+	private var valueType: Value
+
+	/// Wrapped value
+	public var wrappedValue: Value {
+		get {
+			return self.valueType
 		}
-
-		/// Initialize with a built-in invalidating type.
-		public init(wrappedValue: Value, _ invalidator: VIViewInvalidatorAction) {
-			self.valueType = wrappedValue
-			self.invalidators = [invalidator]
+		set {
+			self.valueType = newValue
 		}
+	}
 
-		/// Initialize with a comma separated collection of built-in invalidating types
-		public init(wrappedValue: Value, _ invalidators: VIViewInvalidatorAction...) {
-			self.valueType = wrappedValue
-			self.invalidators = invalidators.map { $0 }
+	/// Initialize with a built-in invalidating type.
+	public init(wrappedValue: Value, _ invalidator: VIViewInvalidatorAction) {
+		self.valueType = wrappedValue
+		self.invalidators = [invalidator]
+	}
+
+	/// Initialize with a comma separated collection of built-in invalidating types
+	public init(wrappedValue: Value, _ invalidators: VIViewInvalidatorAction...) {
+		self.valueType = wrappedValue
+		self.invalidators = invalidators.map { $0 }
+	}
+
+	/// Use a static subscript to get to the wrapper value via a keypath on the `VIViewType` instance
+	///
+	/// See (Swift By Sundell):
+	///
+	/// * [accessing-a-swift-property-wrappers-enclosing-instance](https://www.swiftbysundell.com/articles/accessing-a-swift-property-wrappers-enclosing-instance/)
+	/// * [the-power-of-subscripts-in-swift](https://www.swiftbysundell.com/articles/the-power-of-subscripts-in-swift/#static-subscripts)
+	public static subscript<EnclosingSelf: VIViewType>(
+		_enclosingInstance object: EnclosingSelf,
+		wrapped _: ReferenceWritableKeyPath<EnclosingSelf, Value>,
+		storage storageKeyPath: ReferenceWritableKeyPath<EnclosingSelf, VIViewInvalidating<Value>>
+	) -> Value {
+		get {
+			return object[keyPath: storageKeyPath].wrappedValue
 		}
-
-		/// Use a static subscript to get to the wrapper value via a keypath on the `VIViewType` instance
-		///
-		/// See (Swift By Sundell):
-		///
-		/// * [accessing-a-swift-property-wrappers-enclosing-instance](https://www.swiftbysundell.com/articles/accessing-a-swift-property-wrappers-enclosing-instance/)
-		/// * [the-power-of-subscripts-in-swift](https://www.swiftbysundell.com/articles/the-power-of-subscripts-in-swift/#static-subscripts)
-		public static subscript<EnclosingSelf: VIViewType>(
-			_enclosingInstance object: EnclosingSelf,
-			wrapped _: ReferenceWritableKeyPath<EnclosingSelf, Value>,
-			storage storageKeyPath: ReferenceWritableKeyPath<EnclosingSelf, VIViewInvalidating<Value>>
-		) -> Value {
-			get {
-				return object[keyPath: storageKeyPath].wrappedValue
-			}
-			set {
-				// Update the propertyWrapper with the new value
-				object[keyPath: storageKeyPath].updateViewInvalidatingPropertyWrapper(newValue, object)
-			}
+		set {
+			// Update the propertyWrapper with the new value
+			object[keyPath: storageKeyPath].updateViewInvalidatingPropertyWrapper(newValue, object)
 		}
 	}
 }
@@ -206,7 +204,7 @@ public protocol VIViewCustomInvalidating {
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
-private extension VIViewType.VIViewInvalidating {
+private extension VIViewInvalidating {
 	// Update the value in the property wrapper with a new value, setting the appropriate view invalidations
 	mutating func updateViewInvalidatingPropertyWrapper(_ value: Value, _ view: VIViewType) {
 		guard self.wrappedValue != value else { return }
@@ -238,51 +236,51 @@ private extension VIViewType.VIViewInvalidating {
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
-public extension VIViewType.VIViewInvalidatorAction {
+public extension VIViewInvalidatorAction {
 
-	class Display: VIViewType.VIViewInvalidatorAction {
+	class Display: VIViewInvalidatorAction {
 		public override func invalidate(_ view: VIViewType) {
-			#if os(macOS)
+#if os(macOS)
 			view.needsDisplay = true
-			#else
+#else
 			view.setNeedsDisplay()
-			#endif
+#endif
 		}
 	}
 
-	class Constraints: VIViewType.VIViewInvalidatorAction {
+	class Constraints: VIViewInvalidatorAction {
 		public override func invalidate(_ view: VIViewType) {
-			#if os(macOS)
+#if os(macOS)
 			view.needsUpdateConstraints = true
-			#else
+#else
 			view.setNeedsUpdateConstraints()
-			#endif
+#endif
 		}
 	}
 
-	class Layout: VIViewType.VIViewInvalidatorAction {
+	class Layout: VIViewInvalidatorAction {
 		public override func invalidate(_ view: VIViewType) {
-			#if os(macOS)
+#if os(macOS)
 			view.needsLayout = true
-			#else
+#else
 			view.setNeedsLayout()
-			#endif
+#endif
 		}
 	}
 
-	class InstrinsicContentSize: VIViewType.VIViewInvalidatorAction {
+	class InstrinsicContentSize: VIViewInvalidatorAction {
 		public override func invalidate(_ view: VIViewType) {
 			view.invalidateIntrinsicContentSize()
 		}
 	}
 
-	#if canImport(AppKit)
-	class RestorableState: VIViewType.VIViewInvalidatorAction {
+#if canImport(AppKit)
+	class RestorableState: VIViewInvalidatorAction {
 		public override func invalidate(_ view: VIViewType) {
 			view.invalidateRestorableState()
 		}
 	}
-	#endif
+#endif
 }
 
 
