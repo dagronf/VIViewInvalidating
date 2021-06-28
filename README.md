@@ -1,7 +1,7 @@
 
 # @VIViewInvalidating
 
-A swift `PropertyWrapper` to provide automatic `NSView`/`UIView` invalidation when the properties value changes. It copies the `@Invalidating` propertyWrapper for code targets prior to macOS 12 and iOS 15.
+A swift `PropertyWrapper` to provide automatic `NSView`/`UIView` invalidation when the properties value changes. It duplicates the `@Invalidating` propertyWrapper for build targets prior to macOS 12 and iOS 15.
 
 <p align="center">
     <img src="https://img.shields.io/github/v/tag/dagronf/VIViewInvalidating" />
@@ -21,13 +21,20 @@ A swift `PropertyWrapper` to provide automatic `NSView`/`UIView` invalidation wh
 
 ## Why?
 
-I saw in the WWDC2021 video ['What's new in AppKit'](https://developer.apple.com/wwdc21/10054) they make a brief mention of a new propertyWrapper type `@Invalidating()` that automatically updates views when the wrappedValue is changed. It appears this propertyWrapper is available in later versions of AppKit (and presumably UIKit).
+I saw in the WWDC2021 video ['What's new in AppKit'](https://developer.apple.com/wwdc21/10054) they make a brief mention of a new propertyWrapper type `@Invalidating()` that automatically updates views when the wrappedValue is changed. It appears this propertyWrapper is only available in later versions of AppKit (and presumably UIKit).
 
-Given that a lot of AppKit/UIKit devs aren't going to be able to move their minimum target version to macOS 13 or iOS 15 soon I decided to try to replicate what I saw in the video.
+Given that a lot of AppKit/UIKit devs aren't going to be able to move their minimum target version to macOS 12 or iOS 15 soon I decided to try to replicate what I saw in the video.
 
 `@VIViewInvalidating()` was born!
 
 And once your target is set to macOS 13 or above, your `@VIViewInvalidating()` definitions will generate deprecation warnings telling you to move to `@Invalidating()`.
+
+I've tried to make sure that the APIs are as close to `@Invalidating` as possible so moving your app target should in theory be as simple as changing some names
+
+* `@VIViewInvalidating` -> `@Invalidating` 
+* `VIViewCustomInvalidating` -> `UIViewInvalidating` (for iOS/tvOS)
+* `VIViewCustomInvalidating` -> `NSViewInvalidating` (for macOS)
+
 
 ## Invalidating types
 
@@ -39,6 +46,7 @@ Provides built-in invalidators for
 - needsLayout (`.layout`)
 - needsUpdateConstraints (`.constraints`)
 - invalidateIntrinsicContentSize() (`.intrinsicContentSize`)
+- invalidateRestorableState() (`.restorableState`)    [***macOS only***]
 
 #### Example
 
@@ -47,32 +55,81 @@ class BadgeView: NSView {
    // Automatically sets needsDisplay = true on the view when the value changes
    @VIViewInvalidating(.display) var color: NSColor = NSColor.blue
    
-   // Set needsDisplay, needsLayout and invalidateIntrinsicContentSize() on the view when the value changes
+   // Set needsDisplay, needsLayout and invalidateIntrinsicContentSize() on 
+   // the view when the value changes
    @VIViewInvalidating(.display, .layout, .intrinsicContentSize)
    var position: NSControl.ImagePosition = .imageLeft
 }
 ```
 
-### Custom invalidation
+## Custom invalidation
 
-You can specify custom invalidation types by conforming your view to the `VIViewCustomInvalidating` protocol and defining a new instance of `VIViewType.VIViewInvalidatingType`
+### Conforming your view to the `VIViewCustomInvalidating` protocol
+
+The protocol method provides a very high-level callback when any of the `@VIViewInvalidating` properties are updated within your view. This is equivalent to the `NSViewInvalidating` protocol in later SDKs (macOS 12 and iOS 15)
 
 #### Example
 
 ```swift
-extension VIViewType.VIViewInvalidatingType {
-   static let customInvalidation = VIViewType.VIViewInvalidatingType("customInvalidation")
+class BadgeView: NSView  {
+   @VIViewInvalidating(.display) var color: NSColor = NSColor.blue
+   @VIViewInvalidating(.display) var backgroundColor: NSColor = NSColor.white
 }
 
-class BadgeView: NSView, VIViewCustomInvalidating  {
-   @VIViewInvalidating(.display, .customInvalidation) var color: NSColor = NSColor.blue
-
-   // Will be called when a property with custom invalidation(s) is given a new value
-   func performViewInvalidation(_ customInvalidationTypes: VIViewInvalidatingTypes) {
-      Swift.print(customInvalidationTypes)
+extension BadgeView: VIViewCustomInvalidating {
+   // Will be called when any `@VIViewInvalidating` property is updated in the view
+   func invalidate(view: NSView) {
+      Swift.print("custom invalidation!")
    }
 }
 ```
+
+### Providing your own invalidator (not recommended!)
+
+**NOTE** that this behaviour is NOT compatible with Apple's `@Invalidating` property wrapper.  `@Invalidating` doesn't provide a similar functionality, so be aware when you move your build target up to macOS13/iOS15 there is no direct replacement so your code will break.
+
+You can provide custom invalidators by defining a new class of type `VIViewType.VIViewInvalidatorAction`.
+
+#### Example
+
+```swift
+class CustomInvalidator: VIViewType.VIViewInvalidatorAction {
+   public override func invalidate(_ view: VIViewType) {
+      Swift.print("Custom invalidator called")
+   }
+}
+
+class ExcitingView: NSView {
+   @VIViewInvalidating(.display) var color: NSColor = .white
+   @VIViewInvalidating(.display, CustomInvalidator()) var backgroundColor: NSColor = .systemBlue
+   override func draw(_ dirtyRect: NSRect) {
+      self.backgroundColor.setFill()
+      dirtyRect.fill()
+   }
+}
+```
+
+# Updates
+
+## 2.0.0
+
+* [**BREAKING**] Now that Apple has made `@Invalidating` available through Xcode, I've changed custom callback to match Apple's 'Invalidating' protocol to aid adoption when upgrading the SDK to one that supports `@Invalidating`.
+* [**BREAKING**] Changed the mechanism for handling custom invalidations.
+* Added `restorableState` as an invalidation type on macOS to be compatible with `@Invalidating` on macOS 12+
+
+## 1.0.0
+
+* Initial release
+
+# Thanks
+
+### John Sundell
+
+[Twitter](https://twitter.com/johnsundell), [Swift By Sundell](https://www.swiftbysundell.com)
+
+* [Accessing a swift property wrappers enclosing instance](https://www.swiftbysundell.com/articles/accessing-a-swift-property-wrappers-enclosing-instance/)
+* [The power of subscripts in swift](https://www.swiftbysundell.com/articles/the-power-of-subscripts-in-swift/#static-subscripts)
+
 
 # License
 

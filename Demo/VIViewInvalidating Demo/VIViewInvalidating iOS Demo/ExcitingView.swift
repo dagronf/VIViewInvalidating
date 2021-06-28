@@ -8,11 +8,18 @@
 import UIKit
 import VIViewInvalidating
 
+// Custom Invalidator
+class MyCustomInvalidator: VIViewType.VIViewInvalidatorAction {
+	public override func invalidate(_ view: VIViewType) {
+		Swift.print("MyCustomInvalidator called...")
+	}
+}
+
 @IBDesignable
 class ExcitingView: UIView {
 
 	@IBInspectable
-	@VIViewInvalidating(.display)
+	@VIViewInvalidating(.display, MyCustomInvalidator())
 	var fillColor: UIColor = .systemBlue
 
 	override func draw(_ rect: CGRect) {
@@ -20,5 +27,13 @@ class ExcitingView: UIView {
 
 		let path = UIBezierPath(rect: rect)
 		path.fill()
+	}
+}
+
+extension ExcitingView: VIViewCustomInvalidating {
+
+	// Custom invalidation handling
+	func invalidate(view: UIView) {
+		Swift.print("custom invalidate!")
 	}
 }

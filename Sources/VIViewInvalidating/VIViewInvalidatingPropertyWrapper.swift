@@ -34,6 +34,7 @@
 /// - needsLayout (`.layout`)
 /// - needsUpdateConstraints (`.constraints`)
 /// - invalidateIntrinsicContentSize() (`.intrinsicContentSize`)
+/// - invalidateRestorableState() (`.restorableState`) [***macOS only***]
 ///
 /// Reproduces `@Invalidating` in macOS systems prior to Monterey (12). Checked back to Xcode 11.4 (macOS 10.14)
 ///
@@ -48,24 +49,48 @@
 ///
 /// ## Custom invalidation
 ///
-/// You can specify custom invalidation types by conforming your view to the `VIViewCustomInvalidating` protocol.
+/// You can specify custom invalidation by conforming your view to the `VIViewCustomInvalidating` protocol.
 ///
 /// ### Example
 ///
 /// ```swift
-/// extension VIViewType.VIViewInvalidatingType {
-///    static let customInvalidation = VIViewType.VIViewInvalidatingType(rawValue: "customInvalidation")
+/// class BadgeView: NSView  {
+///    @VIViewInvalidating(.display) var color: NSColor = NSColor.blue
+///    @VIViewInvalidating(.display) var backgroundColor: NSColor = NSColor.white
 /// }
 ///
-/// class BadgeView: NSView, VIViewCustomInvalidating  {
-///    @VIViewInvalidating(.display, .customInvalidation) var color: NSColor = NSColor.blue
-///
-///    func performViewInvalidation(_ customInvalidationTypes: VIViewInvalidatingTypes) {
-///       Swift.print(customInvalidationTypes)
+/// extension BadgeView: VIViewCustomInvalidating {
+///    // Will be called when any `@VIViewInvalidating` property is updated in the view
+///    func invalidate(view: NSView) {
+///       Swift.print("custom invalidation!")
 ///    }
 /// }
 /// ```
 ///
+/// ## Not recommended - Granular custom invalidation
+///
+/// **NOTE** that this behaviour is NOT compatible with Apple's `@Invalidating` property wrapper.  `@Invalidating` doesn't provide a similar functionality, so be aware when you move your build target up to macOS13/iOS15 there is no direct replacement so your code will break.
+///
+/// You can provide custom invalidators by defining a new class of type `VIViewType.VIViewInvalidatorAction`.
+///
+/// ```swift
+/// class CustomInvalidator: VIViewType.VIViewInvalidatorAction {
+///    public override func invalidate(_ view: VIViewType) {
+///       Swift.print("Custom invalidator called")
+///    }
+/// }
+///
+/// class ExcitingView: NSView {
+///    @VIViewInvalidating(.display) var color: NSColor = .white
+///    @VIViewInvalidating(.display, CustomInvalidator()) var backgroundColor: NSColor = .systemBlue
+///    override func draw(_ dirtyRect: NSRect) {
+///       self.backgroundColor.setFill()
+///       dirtyRect.fill()
+///    }
+/// }
+/// ```
+///
+
 
 #if os(macOS)
 import AppKit
@@ -77,60 +102,44 @@ import UIKit
 public typealias VIViewType = UIView
 #endif
 
+@available(swift 5.1)
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
 extension VIViewType {
-	/// Built-in view invalidation types. Can be extended with new custom types if needed
-	public struct VIViewInvalidatingType: Hashable, CustomDebugStringConvertible {
 
-		public let rawValue: String
+	/// An invalidator class type
+	open class VIViewInvalidatorAction {
+		public init() { }
 
-		/// Returns a debug description for the VIViewInvalidatingType type
-		public var debugDescription: String {
-			return "VIViewInvalidatingType('\(rawValue)')"
-		}
-
-		/// Initializer
-		public init(_ rawValue: String) {
-			self.rawValue = rawValue
+		/// Will be called when the containing property is changed
+		open func invalidate(_ view: VIViewType) {
+			fatalError("Must override this method for custom invalidators")
 		}
 
 		// Built-in types
 
 		/// `setNeedsDisplay`
-		public static let display = VIViewInvalidatingType("_display")
+		public static let display = VIViewInvalidatorAction.Display()
 		/// `setNeedsUpdateConstraints`
-		public static let constraints = VIViewInvalidatingType("_constraints")
+		public static let constraints = VIViewInvalidatorAction.Constraints()
 		/// `setNeedsLayout`
-		public static let layout = VIViewInvalidatingType("_layout")
+		public static let layout = VIViewInvalidatorAction.Layout()
 		/// `invalidateIntrinsicContentSize`
-		public static let intrinsicContentSize = VIViewInvalidatingType("_intrinsicContentSize")
+		public static let intrinsicContentSize = VIViewInvalidatorAction.InstrinsicContentSize()
 
-		// All built-in types
-		fileprivate static let allBuiltIn: [VIViewInvalidatingType] = [.display, .constraints, .layout, .intrinsicContentSize]
+		#if canImport(AppKit)
+		/// `invalidateRestorableState`
+		public static let restorableState = VIViewInvalidatorAction.RestorableState()
+		#endif
 	}
 
-	/// Wrapper for a collection of invalidation types
-	public typealias VIViewInvalidatingTypes = Set<VIViewType.VIViewInvalidatingType>
-}
-
-@available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
-@available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
-@available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
-extension VIViewType {
 	/// A property wrapper for NSView/UIView that will automatically invalidate the containing view
 	/// as its wrapped value is changed.
 	@propertyWrapper
 	public struct VIViewInvalidating<Value: Equatable> {
 		/// Built-in invalidating types supported by the propertyWrapper
-		public let types: VIViewInvalidatingTypes
-
-		/// custom invalidating types supported by the propertyWrapper
-		public let customTypes: VIViewInvalidatingTypes
-
-		/// Are custom types defined for this property?
-		@inlinable public var hasCustomTypes: Bool { !self.customTypes.isEmpty }
+		private let invalidators: [VIViewInvalidatorAction]
 
 		// Stored value
 		private var valueType: Value
@@ -146,17 +155,15 @@ extension VIViewType {
 		}
 
 		/// Initialize with a built-in invalidating type.
-		public init(wrappedValue: Value, _ type: VIViewInvalidatingType) {
+		public init(wrappedValue: Value, _ invalidator: VIViewInvalidatorAction) {
 			self.valueType = wrappedValue
-			self.types = Set([type])
-			self.customTypes = self.types.subtracting(VIViewInvalidatingType.allBuiltIn)
+			self.invalidators = [invalidator]
 		}
 
 		/// Initialize with a comma separated collection of built-in invalidating types
-		public init(wrappedValue: Value, _ types: VIViewInvalidatingType...) {
+		public init(wrappedValue: Value, _ invalidators: VIViewInvalidatorAction...) {
 			self.valueType = wrappedValue
-			self.types = Set(types.map { $0 })
-			self.customTypes = self.types.subtracting(VIViewInvalidatingType.allBuiltIn)
+			self.invalidators = invalidators.map { $0 }
 		}
 
 		/// Use a static subscript to get to the wrapper value via a keypath on the `VIViewType` instance
@@ -184,17 +191,18 @@ extension VIViewType {
 // MARK: - Custom invalidation types
 
 /// Custom view invalidating conformance
-@available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
-@available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
-@available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
+@available(swift 5.1)
+@available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use Apple's NSViewInvalidating protocol for macOS 12 and above")
+@available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use Apple's NSViewInvalidating protocol wrapper for iOS 15 and above")
+@available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use Apple's NSViewInvalidating protocol wrapper for tvOS 15 and above")
 public protocol VIViewCustomInvalidating {
-	/// Called when a ViewInvalidation specifies one or more custom invalidation types.
-	/// `customInvalidationType` contains only the custom validation types specified, and none of the built-in (if they were also specified)
-	func performViewInvalidation(_ customInvalidationTypes: VIViewType.VIViewInvalidatingTypes)
+	/// Called when a containing view implements the `VIViewInvalidating` protocol.
+	func invalidate(view: VIViewType)
 }
 
 // MARK: - Value update handling
 
+@available(swift 5.1)
 @available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
 @available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
 @available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
@@ -213,66 +221,68 @@ private extension VIViewType.VIViewInvalidating {
 	// Trigger the appropriate invalidations on `view`
 	private func triggerInvalidations(_ view: VIViewType) {
 		// Built-in invalidations
-
-		if types.contains(.display) {
-			self.invalidateNeedsDisplay(view)
-		}
-		if types.contains(.constraints) {
-			self.invalidateNeedsUpdateConstraints(view)
-		}
-		if types.contains(.layout) {
-			self.invalidateNeedsUpdateLayout(view)
-		}
-		if types.contains(.intrinsicContentSize) {
-			self.updateInvalidateIntrinsicContentSize(view)
+		self.invalidators.forEach { invalidator in
+			invalidator.invalidate(view)
 		}
 
-		if hasCustomTypes {
-			self.invalidateCustomTypes(view)
+		// Custom validation
+		if let invalidatable = view as? VIViewCustomInvalidating {
+			invalidatable.invalidate(view: view)
 		}
-	}
-
-	private func invalidateCustomTypes(_ view: VIViewType) {
-		assert(hasCustomTypes)
-
-		// Call custom invalidation routine if view is conformant and we have custom types specified
-		if let view = view as? VIViewCustomInvalidating {
-			view.performViewInvalidation(customTypes)
-		}
-		else {
-			let warningMsg = "Warning: Custom ViewInvalidating type(s) \(customTypes.map { $0.rawValue }) assigned to non-conforming view \(view)"
-			assert(false, warningMsg)
-			Swift.debugPrint(warningMsg)
-		}
-	}
-
-	// MARK: - NSView/UIView Platform wrappers
-
-	private func invalidateNeedsDisplay(_ view: VIViewType) {
-		#if os(macOS)
-		view.needsDisplay = true
-		#else
-		view.setNeedsDisplay()
-		#endif
-	}
-
-	private func invalidateNeedsUpdateConstraints(_ view: VIViewType) {
-		#if os(macOS)
-		view.needsUpdateConstraints = true
-		#else
-		view.setNeedsUpdateConstraints()
-		#endif
-	}
-
-	private func invalidateNeedsUpdateLayout(_ view: VIViewType) {
-		#if os(macOS)
-		view.needsLayout = true
-		#else
-		view.setNeedsLayout()
-		#endif
-	}
-
-	private func updateInvalidateIntrinsicContentSize(_ view: VIViewType) {
-		view.invalidateIntrinsicContentSize()
 	}
 }
+
+// MARK: - Built-in invalidator implementations
+
+@available(swift 5.1)
+@available(macOS, deprecated: 12.0, obsoleted: 14.0, message: "Use the built-in @Invalidating property wrapper for macOS 12 and above")
+@available(iOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for iOS 15 and above")
+@available(tvOS, deprecated: 15.0, obsoleted: 16.0, message: "Use the built-in @Invalidating property wrapper for tvOS 15 and above")
+public extension VIViewType.VIViewInvalidatorAction {
+
+	class Display: VIViewType.VIViewInvalidatorAction {
+		public override func invalidate(_ view: VIViewType) {
+			#if os(macOS)
+			view.needsDisplay = true
+			#else
+			view.setNeedsDisplay()
+			#endif
+		}
+	}
+
+	class Constraints: VIViewType.VIViewInvalidatorAction {
+		public override func invalidate(_ view: VIViewType) {
+			#if os(macOS)
+			view.needsUpdateConstraints = true
+			#else
+			view.setNeedsUpdateConstraints()
+			#endif
+		}
+	}
+
+	class Layout: VIViewType.VIViewInvalidatorAction {
+		public override func invalidate(_ view: VIViewType) {
+			#if os(macOS)
+			view.needsLayout = true
+			#else
+			view.setNeedsLayout()
+			#endif
+		}
+	}
+
+	class InstrinsicContentSize: VIViewType.VIViewInvalidatorAction {
+		public override func invalidate(_ view: VIViewType) {
+			view.invalidateIntrinsicContentSize()
+		}
+	}
+
+	#if canImport(AppKit)
+	class RestorableState: VIViewType.VIViewInvalidatorAction {
+		public override func invalidate(_ view: VIViewType) {
+			view.invalidateRestorableState()
+		}
+	}
+	#endif
+}
+
+

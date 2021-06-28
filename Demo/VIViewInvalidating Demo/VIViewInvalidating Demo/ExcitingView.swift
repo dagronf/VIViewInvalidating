@@ -8,25 +8,29 @@
 import AppKit
 import VIViewInvalidating
 
-extension VIViewType.VIViewInvalidatingType {
-	static let custom1 = VIViewType.VIViewInvalidatingType("ci1")
-	static let custom2 = VIViewType.VIViewInvalidatingType("ci2")
+// Custom Invalidator
+class MyCustomInvalidator: VIViewType.VIViewInvalidatorAction {
+	public override func invalidate(_ view: VIViewType) {
+		Swift.print("MyCustomInvalidator called...")
+	}
 }
 
 @IBDesignable
-class ExcitingView: NSView, VIViewCustomInvalidating {
+class ExcitingView: NSView {
 	@IBInspectable
-	@VIViewInvalidating(.display, .custom1, .custom2)
+	@VIViewInvalidating(.display, MyCustomInvalidator())
 	var backgroundColor: NSColor = .systemBlue
 
 	override func draw(_ dirtyRect: NSRect) {
 		self.backgroundColor.setFill()
 		dirtyRect.fill()
 	}
+}
+
+extension ExcitingView: VIViewCustomInvalidating {
 
 	// Custom invalidation handling
-	func performViewInvalidation(_ customInvalidationTypes: VIViewType.VIViewInvalidatingTypes) {
-		Swift.print(customInvalidationTypes)
+	func invalidate(view: NSView) {
+		Swift.print("custom invalidate!")
 	}
-
 }
