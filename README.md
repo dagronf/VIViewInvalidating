@@ -111,6 +111,10 @@ class ExcitingView: NSView {
 
 # Updates
 
+### 3.0.0
+
+* Added separate dynamic and static targets (thanks [BeehiveInnovations](https://github.com/BeehiveInnovations))!
+
 ### 2.0.1
 
 * Resolved Swift runtime crash when building in Xcode 11 and Swift 5.1. Previous version would crash the Swift runtime as it tries to resolve generic arguments for a class nested in an extension. Removing the nested extension containing the property wrapper (it wasn't required) solved the issue. This has no impact when compiling with Xcode 12 and above.
