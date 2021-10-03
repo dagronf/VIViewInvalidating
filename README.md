@@ -111,6 +111,10 @@ class ExcitingView: NSView {
 
 # Updates
 
+### 3.0.1
+
+* Fixed macOS demo linkage
+
 ### 3.0.0
 
 * Added separate dynamic and static targets (thanks [BeehiveInnovations](https://github.com/BeehiveInnovations))!
